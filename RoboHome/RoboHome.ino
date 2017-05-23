@@ -87,7 +87,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
     const char* code = json["code"];
 
-    rcSwitch.enableTransmit(0); //Pin 3 on NodeMCU
+    rcSwitch.enableTransmit(0); //Pin D3 on NodeMCU
     rcSwitch.setPulseLength(184);
     rcSwitch.send(atoi(code), 24);
 }
