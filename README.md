@@ -8,6 +8,15 @@ RoboHome-ESP8266 is the code that runs on an ESP8266 based microcontroller like 
 
 RoboHome is a SaaS tool that also integrates with Amazon's Echo to enable control of semi-connected devices (think IR, and RF) in your house over wifi! This is done using an MQTT pub-sub network to send messages between the website or Echo to a microcontroller like the ESP8266 which has various transmitters hooked up to it (like IR and RF transmitters) to send signals to these devices. This can be used to control RF outlets with lights plugged into them, or to turn on your TV and change channels for instance.
 
+### Install Arduino Libraries :books:
+
+Most of these can be downloaded from the Library Manager in the Ardunio IDE.  If it's not listed, follow the directions in the links below.
+
+- [ArduinoJson](https://github.com/bblanchon/ArduinoJson) for parsing JSON response from RoboHome-Web API
+- [PubSub Client](https://github.com/knolleary/pubsubclient) for reading from the MQTT stream
+- [RC-Switch](https://github.com/sui77/rc-switch) for sending signals to control RF devices
+- [RestClient](https://github.com/DaKaZ/esp8266-restclient) for making API requests to the RoboHome-Web API 
+
 ### Configuring :wrench:
 
 - Set values for all the variables at the top of the `RoboHome.ino` file to connect to your:
