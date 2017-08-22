@@ -8,7 +8,7 @@ const char* ssid = "";
 const char* password = "";
 const char* robohomeWebUrl = "";
 const char* robohomeWebSha1Fingerprint = "";
-const char* mqttChannel = "";
+const char* mqttTopic = "";
 const char* mqttServer = "";
 const char* mqttUser = "";
 const char* mqttPassword = "";
@@ -21,10 +21,12 @@ PubSubClient mqttClient(wifiClient);
 RestClient restClient = RestClient(robohomeWebUrl, 443, robohomeWebSha1Fingerprint);
 
 void setup() {
+    enableBuiltinLed();
+
     Serial.begin(115200);
-    
+
     connectToWifi();
-    
+
     mqttClient.setServer(mqttServer, mqttPort);
     mqttClient.setCallback(callback);
 }
@@ -33,7 +35,7 @@ void loop() {
     if (!mqttClient.connected()) {
         connectToBroker();
     }
-    
+
     mqttClient.loop();
 }
 
@@ -45,7 +47,8 @@ void connectToWifi() {
     WiFi.begin(ssid, password);
 
     while (WiFi.status() != WL_CONNECTED) {
-        delay(100);
+        turnOnBuiltinLedForMs(50);
+        delay(50);
     }
 
     Serial.print("WiFi connected! IP address: ");
@@ -55,9 +58,11 @@ void connectToWifi() {
 void connectToBroker() {
     while (!mqttClient.connected()) {
         if (mqttClient.connect("", mqttUser, mqttPassword)) {
+            turnBuiltinLedOff();
             Serial.println("Connected to MQTT broker!");
-            mqttClient.subscribe(mqttChannel);
+            mqttClient.subscribe(mqttTopic);
         } else {
+            turnBuiltinLedOn();
             Serial.print("Failed to connect to MQTT broker, will try again in 5 seconds, rc=" + mqttClient.state());
             delay(5000);
         }
@@ -65,12 +70,14 @@ void connectToBroker() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
+    turnOnBuiltinLedForMs(100);
+    
     String message = "";
     
     for (int i = 0; i < length; i++) {
         message += (char)payload[i];
     }
-    
+
     restClient.setContentType("application/x-www-form-urlencoded");
 
     String userId = getSectionFromString(topic, 1);
@@ -78,11 +85,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
     String data = "userId=" + userId + "&action=" + message + "&deviceId=" + deviceId;
 
     String response = "";
-    
+
     int statusCode = restClient.post("/api/devices/info", data.c_str(), &response);
 
     String body = readResponseBody(response);
-    
+
     JsonObject& json = toJson(body);
 
     const char* code = json["code"];
@@ -90,6 +97,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
     rcSwitch.enableTransmit(0); //Pin D3 on NodeMCU
     rcSwitch.setPulseLength(184);
     rcSwitch.send(atoi(code), 24);
+
+    turnOnBuiltinLedForMs(100);
 }
 
 JsonObject& toJson(String string) {
@@ -151,4 +160,22 @@ String getSectionFromString(String data, int index)
     }
 
     return value;
+}
+
+void enableBuiltinLed() {
+  pinMode(LED_BUILTIN, OUTPUT);
+}
+
+void turnBuiltinLedOn() {
+  digitalWrite(LED_BUILTIN, LOW);
+}
+
+void turnBuiltinLedOff() {
+  digitalWrite(LED_BUILTIN, HIGH);
+}
+
+void turnOnBuiltinLedForMs(uint millisecondsToTurnOn) {
+    turnBuiltinLedOn();
+    delay(millisecondsToTurnOn);
+    turnBuiltinLedOff();
 }
