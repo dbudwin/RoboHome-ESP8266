@@ -8,7 +8,7 @@ const char* ssid = "";
 const char* password = "";
 const char* robohomeWebUrl = "";
 const char* robohomeWebSha1Fingerprint = "";
-const char* mqttChannel = "";
+const char* mqttTopic = "";
 const char* mqttServer = "";
 const char* mqttUser = "";
 const char* mqttPassword = "";
@@ -56,7 +56,7 @@ void connectToBroker() {
     while (!mqttClient.connected()) {
         if (mqttClient.connect("", mqttUser, mqttPassword)) {
             Serial.println("Connected to MQTT broker!");
-            mqttClient.subscribe(mqttChannel);
+            mqttClient.subscribe(mqttTopic);
         } else {
             Serial.print("Failed to connect to MQTT broker, will try again in 5 seconds, rc=" + mqttClient.state());
             delay(5000);
