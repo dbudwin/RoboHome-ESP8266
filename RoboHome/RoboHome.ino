@@ -28,7 +28,7 @@ void setup() {
     connectToWifi();
 
     mqttClient.setServer(mqttServer, mqttPort);
-    mqttClient.setCallback(callback);
+    mqttClient.setCallback(mqttMessageReceivedCallback);
 }
 
 void loop() {
@@ -69,36 +69,84 @@ void connectToBroker() {
     }
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
+void mqttMessageReceivedCallback(char* topic, byte* payload, size_t length) {
+    const size_t retryAttempts = 3;
+
+    for (size_t i = 0; i < retryAttempts; i++) {
+        String body = getBodyOfHttpRequestForDeviceInfo(topic, payload, length);
+
+        if (body.length() != 0) {
+            controlDevice(body);
+            break;
+        }
+
+        yield();
+    }
+}
+
+String getBodyOfHttpRequestForDeviceInfo(char* topic, byte* payload, size_t length) {
     turnOnBuiltinLedForMs(100);
     
     String message = "";
     
-    for (int i = 0; i < length; i++) {
+    for (size_t i = 0; i < length; i++) {
         message += (char)payload[i];
     }
 
     restClient.setContentType("application/x-www-form-urlencoded");
 
     String userId = getSectionFromString(topic, 1);
-    int deviceId = getSectionFromString(topic, 2).toInt();
+    String deviceId = getSectionFromString(topic, 2);
     String data = "userId=" + userId + "&action=" + message + "&deviceId=" + deviceId;
-
     String response = "";
 
-    int statusCode = restClient.post("/api/devices/info", data.c_str(), &response);
-
+    unsigned int statusCode = restClient.post("/api/devices/info", data.c_str(), &response);
+    
     String body = readResponseBody(response);
 
+    Serial.println("Data: " + data);
+
+    return isResponseValid(statusCode, body) ? body : String();
+}
+
+bool isResponseValid(unsigned int statusCode, String body) {
+    const unsigned int httpOkay = 200;
+  
+    if (statusCode != httpOkay) {
+        Serial.println("Error, HTTP status code: " + String(statusCode));
+
+        return false;
+    }
+
+    if (body.length() == 0) {
+        Serial.println("Error, empty body!");
+
+        return false;
+    }
+
+    Serial.println("Status Code: " + String(statusCode));
+    Serial.println("JSON Response: " + body);
+
+    return true;
+}
+
+void controlDevice(String body) {
     JsonObject& json = toJson(body);
 
     const char* code = json["code"];
 
+    turnOnBuiltinLedForMs(100);
+
     rcSwitch.enableTransmit(0); //Pin D3 on NodeMCU
     rcSwitch.setPulseLength(184);
-    rcSwitch.send(atoi(code), 24);
 
-    turnOnBuiltinLedForMs(100);
+    unsigned int numberOfTimesToSendSignal = 10;
+
+    for (size_t i = 0; i < numberOfTimesToSendSignal; i++) {
+        rcSwitch.send(atoi(code), 24);
+
+        yield();
+    }
 }
 
 JsonObject& toJson(String string) {
@@ -108,7 +156,6 @@ JsonObject& toJson(String string) {
 
     if (!root.success()) {
         Serial.println("Parsing to JSON failed!");
-        //return 0;
     }
 
     return root;
@@ -117,25 +164,25 @@ JsonObject& toJson(String string) {
 String readResponseBody(String response) {
     response.trim();
     
-    int chunkSize = sizeOfChunk(response);
-    int endOfChunkSizeIndex = response.indexOf("\r\n");
+    size_t chunkSize = sizeOfChunk(response);
+    unsigned int endOfChunkSizeIndex = response.indexOf("\r\n");
     
     String responseAfterChunkSize = response.substring(endOfChunkSizeIndex, response.length());
     responseAfterChunkSize.trim();
 
     String responseBody;
     
-    for (int i = 0; i < chunkSize; i++) {
+    for (size_t i = 0; i < chunkSize; i++) {
         responseBody += responseAfterChunkSize.charAt(i);
     }
 
     return responseBody;
 }
 
-unsigned int sizeOfChunk(String response) {
-    int endOfChunkSizeIndex = response.indexOf("\r\n");
+size_t sizeOfChunk(String response) {
+    unsigned int endOfChunkSizeIndex = response.indexOf("\r\n");
     String chunkString = response.substring(0, endOfChunkSizeIndex);
-    unsigned int chunkSize = hexToInt(chunkString);
+    size_t chunkSize = hexToInt(chunkString);
 
     return chunkSize;
 }
@@ -144,12 +191,12 @@ unsigned int hexToInt(String hexString) {
     return strtoul(hexString.c_str(), NULL, 16);
 }
 
-String getSectionFromString(String data, int index)
+String getSectionFromString(String data, unsigned int index)
 {
-    int stringData = 0; 
+    unsigned int stringData = 0; 
     String value = "";
     
-    for (int i = 0; i < data.length(); i++) { 
+    for (size_t i = 0; i < data.length(); i++) { 
         if (data[i] == '/') {
             stringData++; 
         } else if (stringData == index) {
@@ -163,15 +210,15 @@ String getSectionFromString(String data, int index)
 }
 
 void enableBuiltinLed() {
-  pinMode(LED_BUILTIN, OUTPUT);
+    pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void turnBuiltinLedOn() {
-  digitalWrite(LED_BUILTIN, LOW);
+    digitalWrite(LED_BUILTIN, LOW);
 }
 
 void turnBuiltinLedOff() {
-  digitalWrite(LED_BUILTIN, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH);
 }
 
 void turnOnBuiltinLedForMs(uint millisecondsToTurnOn) {
