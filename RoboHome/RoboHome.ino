@@ -13,7 +13,7 @@ const String ROBOHOME_PASSWORD = "";
 const String ROBOHOME_PASSWORD_GRANT_CLIENT_SECRET = "";
 const int ROBOHOME_PASSWORD_GRANT_CLIENT_ID = 2;
 
-const char* mqttTopic = "RoboHome/1/+";
+const char* mqttTopic = "";
 const char* mqttUser = "";
 const char* mqttPassword = "";
 
@@ -115,6 +115,7 @@ void setMqttSettings() {
         const unsigned int mqttPort = 17431; // To use json["mqtt"]["tlsPort"]; the PubSubClient needs to support TLS first
         mqttUser = json["mqtt"]["user"];
         mqttPassword = json["mqtt"]["password"];
+        mqttTopic = json["mqtt"]["topic"];
 
         mqttClient.setServer(mqttServer, mqttPort);
         mqttClient.setCallback(mqttMessageReceivedCallback);
