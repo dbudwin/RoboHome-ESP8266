@@ -4,31 +4,36 @@
 #include <RCSwitch.h>
 #include <RestClient.h>
 
-const char* ssid = "";
-const char* password = "";
-const char* robohomeWebUrl = "";
-const char* robohomeWebSha1Fingerprint = "";
-const char* mqttTopic = "";
-const char* mqttServer = "";
+const char* SSID = "";
+const char* WIFI_PASSWORD = "";
+const char* ROBOHOME_URL = "";
+const char* ROBOHOME_SHA1_FINGERPRINT = "";
+const String ROBOHOME_USERNAME = "";
+const String ROBOHOME_PASSWORD = "";
+const String ROBOHOME_PASSWORD_GRANT_CLIENT_SECRET = "";
+const int ROBOHOME_PASSWORD_GRANT_CLIENT_ID = 2;
+
+const char* mqttTopic = "RoboHome/1/+";
 const char* mqttUser = "";
 const char* mqttPassword = "";
-const int mqttPort = 12345;
 
 RCSwitch rcSwitch = RCSwitch();
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
-
-RestClient restClient = RestClient(robohomeWebUrl, 443, robohomeWebSha1Fingerprint);
+String ACCESS_TOKEN;
 
 void setup() {
     enableBuiltinLed();
+
+    rcSwitch.setRepeatTransmit(100);
 
     Serial.begin(115200);
 
     connectToWifi();
 
-    mqttClient.setServer(mqttServer, mqttPort);
-    mqttClient.setCallback(mqttMessageReceivedCallback);
+    ACCESS_TOKEN = getAccessToken();
+
+    setMqttSettings();
 }
 
 void loop() {
@@ -42,9 +47,9 @@ void loop() {
 void connectToWifi() {
     delay(10);
     Serial.println();
-    Serial.println("Connecting to " + String(ssid));
+    Serial.println("Connecting to " + String(SSID));
 
-    WiFi.begin(ssid, password);
+    WiFi.begin(SSID, WIFI_PASSWORD);
 
     while (WiFi.status() != WL_CONNECTED) {
         turnOnBuiltinLedForMs(50);
@@ -66,6 +71,53 @@ void connectToBroker() {
             Serial.print("Failed to connect to MQTT broker, will try again in 5 seconds, rc=" + mqttClient.state());
             delay(5000);
         }
+    }
+}
+
+String getAccessToken() {
+    RestClient restClient = RestClient(ROBOHOME_URL, 443, ROBOHOME_SHA1_FINGERPRINT);
+
+    restClient.setContentType("application/x-www-form-urlencoded");
+
+    String data = "grant_type=password&client_id=" + String(ROBOHOME_PASSWORD_GRANT_CLIENT_ID) + "&client_secret=" + ROBOHOME_PASSWORD_GRANT_CLIENT_SECRET + "&username=" + ROBOHOME_USERNAME + "&password=" + ROBOHOME_PASSWORD + "&scope=info";
+    String response = "";
+
+    unsigned int statusCode = restClient.post("/oauth/token", data.c_str(), &response);
+
+    String body = readResponseBody(response);
+
+    if (isResponseValid(statusCode, body)) {
+        JsonObject& json = toJson(body);
+
+        const char* accessToken = json["access_token"];
+
+        return String(accessToken);
+    }
+}
+
+void setMqttSettings() { 
+    RestClient restClient = RestClient(ROBOHOME_URL, 443, ROBOHOME_SHA1_FINGERPRINT);
+
+    String authorizationBearerHeader = "Authorization: Bearer " + ACCESS_TOKEN;
+
+    restClient.setHeader(authorizationBearerHeader.c_str());
+
+    String response = "";
+
+    unsigned int statusCode = restClient.get("/api/settings/mqtt", &response);
+
+    String body = readResponseBody(response);
+
+    if (isResponseValid(statusCode, body)) {
+        JsonObject& json = toJson(body);
+
+        const char* mqttServer = json["mqtt"]["server"];
+        const unsigned int mqttPort = 17431; // To use json["mqtt"]["tlsPort"]; the PubSubClient needs to support TLS first
+        mqttUser = json["mqtt"]["user"];
+        mqttPassword = json["mqtt"]["password"];
+
+        mqttClient.setServer(mqttServer, mqttPort);
+        mqttClient.setCallback(mqttMessageReceivedCallback);
     }
 }
 
@@ -93,6 +145,11 @@ String getBodyOfHttpRequestForDeviceInfo(char* topic, byte* payload, size_t leng
         message += (char)payload[i];
     }
 
+    String authorizationBearerHeader = "Authorization: Bearer " + ACCESS_TOKEN;
+
+    RestClient restClient = RestClient(ROBOHOME_URL, 443, ROBOHOME_SHA1_FINGERPRINT);
+    
+    restClient.setHeader(authorizationBearerHeader.c_str());
     restClient.setContentType("application/x-www-form-urlencoded");
 
     String userId = getSectionFromString(topic, 1);
@@ -133,20 +190,14 @@ bool isResponseValid(unsigned int statusCode, String body) {
 void controlDevice(String body) {
     JsonObject& json = toJson(body);
 
-    const char* code = json["code"];
-
     turnOnBuiltinLedForMs(100);
 
+    const char* code = json["code"];
+    const char* pulseLength = json["pulse_length"];
+
     rcSwitch.enableTransmit(0); //Pin D3 on NodeMCU
-    rcSwitch.setPulseLength(184);
-
-    unsigned int numberOfTimesToSendSignal = 10;
-
-    for (size_t i = 0; i < numberOfTimesToSendSignal; i++) {
-        rcSwitch.send(atoi(code), 24);
-
-        yield();
-    }
+    rcSwitch.setPulseLength(atoi(pulseLength));
+    rcSwitch.send(atoi(code), 24);
 }
 
 JsonObject& toJson(String string) {
