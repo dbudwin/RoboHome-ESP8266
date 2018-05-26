@@ -33,7 +33,7 @@ void setup() {
 
     ACCESS_TOKEN = getAccessToken();
 
-    setMqttSettings();
+    setMqttSettingsFromRoboHomeServer();
 }
 
 void loop() {
@@ -95,7 +95,7 @@ String getAccessToken() {
     }
 }
 
-void setMqttSettings() { 
+void setMqttSettingsFromRoboHomeServer() {
     RestClient restClient = RestClient(ROBOHOME_URL, 443, ROBOHOME_SHA1_FINGERPRINT);
 
     String authorizationBearerHeader = "Authorization: Bearer " + ACCESS_TOKEN;
@@ -153,9 +153,8 @@ String getBodyOfHttpRequestForDeviceInfo(char* topic, byte* payload, size_t leng
     restClient.setHeader(authorizationBearerHeader.c_str());
     restClient.setContentType("application/x-www-form-urlencoded");
 
-    String userId = getSectionFromString(topic, 1);
-    String deviceId = getSectionFromString(topic, 2);
-    String data = "userId=" + userId + "&action=" + message + "&deviceId=" + deviceId;
+    String publicDeviceId = getSectionFromString(topic, 2);
+    String data = "action=" + message + "&publicDeviceId=" + publicDeviceId;
     String response = "";
 
     unsigned int statusCode = restClient.post("/api/devices/info", data.c_str(), &response);
